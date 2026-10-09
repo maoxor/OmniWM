@@ -158,4 +158,42 @@ final class DwindleInteractiveMoveTests: XCTestCase {
         engine.removeLayout(for: fixture.ws)
         XCTAssertNil(engine.interactiveMove)
     }
+
+    func testDropZoneCenterSwapsAndEdgesPickNearestSide() {
+        let frame = CGRect(x: 100, y: 100, width: 400, height: 200)
+        XCTAssertNil(DwindleDropZone.direction(for: CGPoint(x: 300, y: 200), in: frame))
+        XCTAssertEqual(DwindleDropZone.direction(for: CGPoint(x: 110, y: 200), in: frame), .left)
+        XCTAssertEqual(DwindleDropZone.direction(for: CGPoint(x: 490, y: 200), in: frame), .right)
+        XCTAssertEqual(DwindleDropZone.direction(for: CGPoint(x: 300, y: 105), in: frame), .down)
+        XCTAssertEqual(DwindleDropZone.direction(for: CGPoint(x: 300, y: 295), in: frame), .up)
+    }
+
+    func testEdgeDropInsertsBesideTargetAndReflowsWithoutGapsOrOverlap() throws {
+        let fixture = try makeFixture()
+        let engine = fixture.engine
+        let c = WindowToken(pid: 3, windowId: 3)
+        _ = engine.addWindow(token: c, to: fixture.ws, activeWindowFrame: nil)
+        _ = engine.calculateLayout(for: fixture.ws, screen: screen)
+        let aFrame = try XCTUnwrap(fixture.nodeFrame(fixture.a))
+        let cFrame = try XCTUnwrap(fixture.nodeFrame(c))
+        let dropPoint = CGPoint(x: aFrame.minX + 5, y: aFrame.midY)
+        let areaBefore = try [fixture.a, fixture.b, c].map { try XCTUnwrap(fixture.nodeFrame($0)) }
+            .reduce(0) { $0 + $1.width * $1.height }
+
+        XCTAssertTrue(engine.interactiveMoveBegin(token: c, startLocation: cFrame.center, in: fixture.ws))
+        XCTAssertEqual(engine.interactiveMoveUpdate(currentLocation: dropPoint, at: 0), fixture.a)
+        XCTAssertEqual(engine.interactiveMove?.dropDirection, .left)
+        XCTAssertEqual(engine.interactiveMoveEnd(), fixture.a)
+        _ = engine.calculateLayout(for: fixture.ws, screen: screen)
+
+        let frames = try [fixture.a, fixture.b, c].map { try XCTUnwrap(fixture.nodeFrame($0)) }
+        XCTAssertLessThan(frames[2].midX, frames[0].midX)
+        XCTAssertEqual(frames.reduce(0) { $0 + $1.width * $1.height }, areaBefore, accuracy: areaBefore * 0.01)
+        for i in 0 ..< frames.count {
+            for j in i + 1 ..< frames.count {
+                let overlap = frames[i].intersection(frames[j])
+                XCTAssertLessThanOrEqual(overlap.isNull ? 0 : overlap.width * overlap.height, 0.5)
+            }
+        }
+    }
 }
