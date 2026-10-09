@@ -194,6 +194,9 @@ extension MouseEventHandler {
             completeActiveMove(at: location)
             return
         }
+        if button == .left, !state.isResizing, dropNativeTitleBarDragOnDwindleTile(at: location) {
+            return
+        }
 
         guard state.isResizing else { return }
         guard shouldAcceptInteractionButton(button) else { return }
